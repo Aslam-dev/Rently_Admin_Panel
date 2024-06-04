@@ -1,0 +1,261 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\SeoSettings;
+use Illuminate\Http\Request;
+
+class SeoSettingsController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        $pages = [
+            'homepage',
+            'all-categories',
+            'about-us',
+            'articles',
+            'chat',
+            'contact-us',
+            'featured-properties',
+            'properties-on-map',
+            'most-viewed-properties',
+            'most-favorite-properties',
+            'privacy-policy',
+            'all-properties',
+            'properties-nearby-city',
+            'search',
+            'subscription-plan',
+            'terms-and-condition',
+            'profile',
+            'user-register',
+
+        ];
+        $seo_pages = SeoSettings::pluck('page');
+
+        return \view('seo_settings.index', compact('seo_pages', 'pages'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+
+        if (!has_permissions('create', 'seo_setting')) {
+            return redirect()->back()->with('error', PERMISSION_ERROR_MSG);
+        } else {
+            $request->validate([
+                'image' => 'required|image|mimes:jpg,png,jpeg,svg|max:2048',
+
+            ]);
+            $seo_setting = new SeoSettings();
+            $seo_setting->page = $request->page;
+            $seo_setting->title = $request->meta_title;
+            $seo_setting->description = $request->meta_description;
+            $seo_setting->keywords = $request->keywords;
+
+            $destinationPath = public_path('images') . config('global.SEO_IMG_PATH');
+            if (!is_dir($destinationPath)) {
+                mkdir($destinationPath, 0777, true);
+            }
+            // image upload
+
+
+            if ($request->hasFile('image')) {
+                $profile = $request->file('image');
+                $imageName = microtime(true) . "." . $profile->getClientOriginalExtension();
+                $profile->move($destinationPath, $imageName);
+                $seo_setting->image = $imageName;
+            } else {
+                $seo_setting->image  = '';
+            }
+
+            $seo_setting->save();
+            return back()->with('success', 'Settings created Successfully Added');
+        }
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show()
+    {
+        $offset = 0;
+        $limit = 10;
+        $sort = 'id';
+        $order = 'DESC';
+
+        if (isset($_GET['offset'])) {
+            $offset = $_GET['offset'];
+        }
+
+        if (isset($_GET['limit'])) {
+            $limit = $_GET['limit'];
+        }
+
+        if (isset($_GET['sort'])) {
+            $sort = $_GET['sort'];
+        }
+
+        if (isset($_GET['order'])) {
+            $order = $_GET['order'];
+        }
+
+
+
+        $sql = SeoSettings::orderBy($sort, $order);
+
+        if (isset($_GET['search']) && !empty($_GET['search'])) {
+            $search = $_GET['search'];
+            $sql->where('id', 'LIKE', "%$search%")->orwhere('page', 'LIKE', "%$search%")->orwhere('title', 'LIKE', "%$search%")->orwhere('description', 'LIKE', "%$search%");
+        }
+
+
+        $total = $sql->count();
+
+        if (isset($_GET['limit'])) {
+            $sql->skip($offset)->take($limit);
+        }
+        $res = $sql->get();
+        $bulkData = array();
+        $bulkData['total'] = $total;
+        $rows = array();
+        $tempRow = array();
+        $count = 1;
+
+
+        $operate = '';
+        $tempRow['type'] = '';
+        $parameter_name_arr = [];
+        foreach ($res as $row) {
+            $tempRow['id'] = $row->id;
+            $tempRow['title'] = $row->title;
+            $tempRow['description'] = $row->description;
+            $tempRow['keywords'] = $row->keywords;
+            $tempRow['image'] = ($row->image != '') ? '<a class="image-popup-no-margins" href="' . $row->image . '"><img class="rounded avatar-md shadow img-fluid" alt="" src="' . $row->image . '" width="55"></a>' : '';
+            $tempRow['img_url'] = $row->image;
+            $tempRow['page'] = $row->page;
+            $operate = '<a  id="' . $row->id . '"  class="btn icon btn-primary btn-sm rounded-pill mt-2 edit_btn editdata"  data-bs-toggle="modal" data-bs-target="#editModal" title="Edit"><i class="fa fa-edit edit_icon"></i></a>';
+            $operate .= '&nbsp;<a href="' . route('seo_settings.destroy', $row->id) . '" onclick="return confirmationDelete(event);" class="btn icon btn-danger btn-sm rounded-pill mt-2" id="delete_btn" data-bs-toggle="tooltip" data-bs-custom-class="tooltip-dark" title="Delete"><i class="bi bi-trash delete_icon"></i></a>';
+            $tempRow['operate'] = $operate;
+
+            $rows[] = $tempRow;
+            $count++;
+        }
+
+        $bulkData['rows'] = $rows;
+        return response()->json($bulkData);
+    }
+
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request)
+    {
+        // dd($request->toArray());
+        if (!has_permissions('create', 'seo_setting')) {
+            return redirect()->back()->with('error', PERMISSION_ERROR_MSG);
+        } else {
+
+            $seo_setting = SeoSettings::find($request->edit_id);
+            $seo_setting->page = $request->edit_page;
+            $seo_setting->title = $request->edit_meta_title;
+            $seo_setting->description = $request->edit_meta_description;
+            $seo_setting->keywords = $request->edit_keywords;
+
+            $destinationPath = public_path('images') . config('global.SEO_IMG_PATH');
+            if (!is_dir($destinationPath)) {
+                mkdir($destinationPath, 0777, true);
+            }
+            // image upload
+
+            if ($request->hasFile('edit_image')) {
+                $url = $seo_setting->image;
+                $relativePath = parse_url($url, PHP_URL_PATH);
+
+                if (file_exists(public_path()  . $relativePath)) {
+                    unlink(public_path()  . $relativePath);
+                }
+                $profile = $request->file('edit_image');
+
+                $imageName = microtime(true) . "." . $profile->getClientOriginalExtension();
+                $profile->move($destinationPath, $imageName);
+                $seo_setting->image = $imageName;
+            }
+
+            $seo_setting->save();
+            return back()->with('success', 'Settings created Successfully Added');
+        }
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+
+        if (!has_permissions('delete', 'seo_setting')) {
+            return redirect()->back()->with('error', env('PERMISSION_ERROR_MSG'));
+        } else {
+            $seo_setting = SeoSettings::find($id);
+            if ($seo_setting->delete()) {
+
+
+                if ($seo_setting->image != '') {
+
+                    $url = $seo_setting->image;
+                    $relativePath = parse_url($url, PHP_URL_PATH);
+
+                    if (file_exists(public_path()  . $relativePath)) {
+                        unlink(public_path()  . $relativePath);
+                    }
+                }
+
+                // Notifications::where('seo$seo_settings_id', $id)->delete();
+                return back()->with('success', 'SEO Setting Deleted Successfully');
+            } else {
+                return back()->with('error', 'Something Wrong');
+            }
+        }
+    }
+}
